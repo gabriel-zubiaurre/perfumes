@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Perfume Inventory</title>
+  <style>
+    .hidden-cols .original-col,
+    .hidden-cols td.original-col {
+      display: none;
+    }
+    :root {
+    --btn-padding: 0.4rem 0.6rem;
+    --btn-radius: 6px;
+    --btn-margin: 0.25rem;
+
+      --bg: #ffffff;
+      --text: #000000;
+      --card: #f7f7f7;
+      --hover: #efefef;
+      --link: #3366cc;
+      --accent: #e0e0e0;
+    }
+    body.dark {
+      --bg: #121212;
+      --text: #ffffff;
+      --card: #1e1e1e;
+      --hover: #2a2a2a;
+      --link: #8ab4f8;
+      --accent: #333333;
+    }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem;
+      background: var(--card);
+      border-bottom: 1px solid var(--accent);
+    }
+    h1 { margin: 0; font-size: 1.5rem; }
+    .controls {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    select, input, button {
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+      background: var(--card);
+      color: var(--text);
+    }
+    input { width: 200px; }
+    nav {
+      display: flex;
+      flex-direction: column;
+      padding: 1rem;
+      gap: 0.3rem;
+      background: var(--card);
+      font-size: 0.95rem;
+    }
+    .status-label {
+      cursor: pointer;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 0.6rem;
+      text-align: center;
+    }
+    th {
+      background: var(--card);
+    }
+    a {
+      color: var(--link);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .gallery {
+      display: none;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      padding: 1rem;
+    }
+    .card {
+      background: var(--card);
+      padding: 1rem;
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .card img {
+      width: 100px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.7);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .modal img {
+      max-width: 90vw;
+      max-height: 90vh;
+      border-radius: 12px;
+    }
+  </style>
+</head>
+<body class="hidden-cols">
+  <header>
+    <h1 id="page-title">Perfume Inventory</h1>
+    <div class="header-controls" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.5rem;">
+      <select id="languageSelect" onchange="changeLanguage(this.value)">
+        <option value="en">🇬🇧 EN</option>
+        <option value="es">🇪🇸 ES</option>
+      </select>
+      <button onclick="toggleView()" id="toggleViewBtn">G / T</button>
+      <button onclick="toggleColumns()" id="toggleColsBtn">>>></button>
+      <button onclick="toggleDarkMode()" id="darkModeBtn">🌙 / ☀️</button>
+      
+    </div>
+  </header>
+
+  <nav>
+    <div class="status-label" onclick="filterByState('')">📦 Total (0)</div>
+    <div class="status-label" onclick="filterByState('🟢')">🟢 In stock (0)</div>
+    <div class="status-label" onclick="filterByState('📦')">📦 Purchased (0)</div>
+    <div class="status-label" onclick="filterByState('⭐')">⭐ Wishlist (0)</div>
+    <div class="status-label" onclick="filterByState('🗑️')">🗑️ Finished (0)</div>
+  </nav>
+
+  <div style="padding: 1rem;"><input type="text" id="search" placeholder="Search perfumes..." onkeyup="applyFilters()" style="width: 80%; margin: 0 auto; display: block; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--accent); background: var(--card); color: var(--text);"></div>
+<table id="perfumeTable">
+    <thead>
+      <tr>
+        <th>Photo</th>
+        <th>Name</th>
+        <th>Brand</th>
+        <th class="original-col">Inspired by</th>
+        <th class="original-col">Original brand</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+
+  <div class="gallery" id="galleryView"></div>
+
+  <div class="modal" id="modal" onclick="closeModal()">
+    <img id="modalImg" src="">
+  </div>
+
+  <script>
+    let currentLang = 'en';
+    let showGallery = false;
+    let showOriginalCols = false;
+    let currentState = '';
+
+    function toggleView() {
+      showGallery = !showGallery;
+      document.getElementById('galleryView').style.display = showGallery ? 'grid' : 'none';
+      document.getElementById('perfumeTable').style.display = showGallery ? 'none' : '';
+    }
+
+    function toggleColumns() {
+      showOriginalCols = !showOriginalCols;
+      document.body.classList.toggle('hidden-cols');
+    }
+
+    function changeLanguage(lang) {
+      currentLang = lang;
+      document.querySelectorAll('a').forEach(link => {
+        if (link.href.includes('fragrantica.')) {
+          link.href = link.href.replace(/fragrantica\.(com|es)/, 'fragrantica.' + currentLang);
+        }
+      });
+      translatePage();
+    }
+
+    function translatePage() {
+      const t = {
+        en: {
+          title: 'Perfume Inventory',
+          search: 'Search perfumes...',
+          toggleView: 'G / T',
+          toggleCols: '>>',
+          statusLabels: ['📦 Total', '🟢 In stock', '📦 Purchased', '⭐ Wishlist', '🗑️ Finished'],
+          headers: ['Photo', 'Name', 'Brand', 'Inspired by', 'Original brand', 'Status']
+        },
+        es: {
+          title: 'Inventario de Perfumes',
+          search: 'Buscar perfumes...',
+          toggleView: 'G / T',
+          toggleCols: '>>',
+          statusLabels: ['📦 Total', '🟢 En stock', '📦 Comprado', '⭐ Deseado', '🗑️ Terminado'],
+          headers: ['Foto', 'Nombre', 'Marca', 'Inspirado en', 'Marca original', 'Estado']
+        }
+      }[currentLang];
+
+      document.title = t.title;
+      document.getElementById('page-title').textContent = t.title;
+      document.getElementById('search').placeholder = t.search;
+      document.getElementById('toggleViewBtn').textContent = t.toggleView;
+      document.getElementById('toggleColsBtn').textContent = t.toggleCols;
+      document.querySelectorAll('.status-label').forEach((el, i) => el.textContent = t.statusLabels[i] + ' (0)');
+      document.querySelectorAll('th').forEach((th, i) => th.textContent = t.headers[i]);
+    }
+
+    function applyFilters() {
+      const term = document.getElementById('search').value.toLowerCase();
+      document.querySelectorAll('[data-status]').forEach(el => {
+        const matchesText = el.textContent.toLowerCase().includes(term);
+        const matchesState = currentState === '' || el.dataset.status === currentState;
+        el.style.display = matchesText && matchesState ? '' : 'none';
+      });
+    }
+
+    function filterByState(state) {
+      currentState = state;
+      applyFilters();
+    }
+
+    function openModal(lang, id) {
+      const modal = document.getElementById('modal');
+      const img = document.getElementById('modalImg');
+      const domain = lang === 'es' ? 'fragrantica.es' : 'fragrantica.com';
+      img.src = `https://${domain}/mdimg/perfume-social-cards/${lang}-p_c_${id}.jpeg`;
+      modal.style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('modal').style.display = 'none';
+    }
+
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.body.classList.add('dark');
+    }
+
+    const perfumes = [
+  {
+    "Name": "Amber Leather",
+    "Brand": "Maison Alhambra",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Maison-Alhambra/Amber-Leather-93661.html",
+    "ID": "93661",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.93661.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_93661.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_93661.jpeg",
+    "InspiredBy": {
+      "Name": "Ombre Leather 2018",
+      "Link": "https://www.fragrantica.com/perfume/Tom-Ford/Ombre-Leather-2018-50239.html"
+    },
+    "OriginalBrand": "Tom Ford"
+  },
+  {
+    "Name": "Atlas",
+    "Brand": "Lattafa Perfumes",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Atlas-89765.html",
+    "ID": "89765",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.89765.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_89765.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_89765.jpeg",
+    "InspiredBy": {
+      "Name": "Megamare",
+      "Link": "https://www.fragrantica.com/perfume/Orto-Parisi/Megamare-53471.html"
+    },
+    "OriginalBrand": "Orto Parisi"
+  },
+  {
+    "Name": "Bade e Al Oud Oud for Glory",
+    "Brand": "Lattafa Perfumes",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Bade-e-Al-Oud-Oud-for-Glory-64948.html",
+    "ID": "64948",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.64948.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_64948.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_64948.jpeg",
+    "InspiredBy": {
+      "Name": "Oud for Greatness",
+      "Link": "https://www.fragrantica.com/perfume/Initio-Parfums-Prives/Oud-for-Greatness-53641.html"
+    },
+    "OriginalBrand": "Initio Parfums Prives"
+  },
+  {
+    "Name": "Black Origami",
+    "Brand": "Maison Alhambra",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Maison-Alhambra/Black-Origami-95506.html",
+    "ID": "95506",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.95506.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_95506.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_95506.jpeg",
+    "InspiredBy": {
+      "Name": "Black Orchid",
+      "Link": "https://www.fragrantica.com/perfume/Tom-Ford/Black-Orchid-1018.html"
+    },
+    "OriginalBrand": "Tom Ford"
+  },
+  {
+    "Name": "Club de Nuit Intense Man",
+    "Brand": "Armaf",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Armaf/Club-de-Nuit-Intense-Man-34696.html",
+    "ID": "34696",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.34696.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_34696.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_34696.jpeg",
+    "InspiredBy": {
+      "Name": "Aventus",
+      "Link": "https://www.fragrantica.com/perfume/Creed/Aventus-9828.html"
+    },
+    "OriginalBrand": "Creed"
+  },
+  {
+    "Name": "Club de Nuit Sillage",
+    "Brand": "Armaf",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Armaf/Club-de-Nuit-Sillage-64105.html",
+    "ID": "64105",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.64105.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_64105.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_64105.jpeg",
+    "InspiredBy": {
+      "Name": "Silver Mountain Water",
+      "Link": "https://www.fragrantica.com/perfume/Creed/Silver-Mountain-Water-472.html"
+    },
+    "OriginalBrand": "Creed"
+  },
+  {
+    "Name": "Encre Noire",
+    "Brand": "Lalique",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Lalique/Encre-Noire-1834.html",
+    "ID": "1834",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.1834.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_1834.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_1834.jpeg"
+  },
+  {
+    "Name": "Essencial Intenso",
+    "Brand": "Natura",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Natura/Essencial-Intenso-35294.html",
+    "ID": "35294",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.35294.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_35294.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_35294.jpeg"
+  },
+  {
+    "Name": "Fusion Intense",
+    "Brand": "Maison Alhambra",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Maison-Alhambra/Fusion-Intense-100477.html",
+    "ID": "100477",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.100477.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_100477.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_100477.jpeg",
+    "InspiredBy": {
+      "Name": "Fucking Fabulous",
+      "Link": "https://www.fragrantica.com/perfume/Tom-Ford/Fucking-Fabulous-46513.html"
+    },
+    "OriginalBrand": "Tom Ford"
+  },
+  {
+    "Name": "Homem Tato",
+    "Brand": "Natura",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Natura/Homem-Tato-68157.html",
+    "ID": "68157",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.68157.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_68157.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_68157.jpeg"
+  },
+  {
+    "Name": "Loewe 7",
+    "Brand": "Loewe",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Loewe/Loewe-7-10253.html",
+    "ID": "10253",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.10253.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_10253.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_10253.jpeg"
+  },
+  {
+    "Name": "Maahir Black Edition",
+    "Brand": "Lattafa Perfumes",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Maahir-Black-Edition-66564.html",
+    "ID": "66564",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.66564.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_66564.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_66564.jpeg",
+    "InspiredBy": {
+      "Name": "Terroni",
+      "Link": "https://www.fragrantica.com/perfume/Orto-Parisi/Terroni-45475.html"
+    },
+    "OriginalBrand": "Orto Parisi"
+  },
+  {
+    "Name": "Niche Emarati Khalid",
+    "Brand": "Lattafa Perfumes",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Niche-Emarati-Khalid-91358.html",
+    "ID": "91358",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.91358.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_91358.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_91358.jpeg"
+  },
+  {
+    "Name": "Humor 6 Paz e Humor",
+    "Brand": "Natura",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Natura/Humor-6-Paz-e-Humor-26110.html",
+    "ID": "26110",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.26110.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_26110.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_26110.jpeg"
+  },
+  {
+    "Name": "Salvo",
+    "Brand": "Maison Alhambra",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Maison-Alhambra/Salvo-93538.html",
+    "ID": "93538",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.93538.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_93538.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_93538.jpeg",
+    "InspiredBy": {
+      "Name": "Sauvage",
+      "Link": "https://www.fragrantica.com/perfume/Dior/Sauvage-31861.html"
+    },
+    "OriginalBrand": "Dior"
+  },
+  {
+    "Name": "Shuhrah Pour Homme",
+    "Brand": "Rasasi",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Rasasi/Shuhrah-Pour-Homme-53578.html",
+    "ID": "53578",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.53578.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_53578.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_53578.jpeg"
+  },
+  {
+    "Name": "Supremacy Incense",
+    "Brand": "Afnan",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Afnan/Supremacy-Incense-64372.html",
+    "ID": "64372",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.64372.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_64372.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_64372.jpeg",
+    "InspiredBy": {
+      "Name": "Interlude Man",
+      "Link": "https://www.fragrantica.com/perfume/Amouage/Interlude-Man-15294.html"
+    },
+    "OriginalBrand": "Amouage"
+  },
+  {
+    "Name": "Terre d Hermes",
+    "Brand": "Hermes",
+    "Status": "🟢",
+    "Link": "https://www.fragrantica.com/perfume/Hermes/Terre-d-Hermes-17.html",
+    "ID": "17",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.17.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_17.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_17.jpeg"
+  },
+  {
+    "Name": "Al Qiam Gold",
+    "Brand": "Lattafa Perfumes",
+    "Status": "📦",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Al-Qiam-Gold-82816.html",
+    "ID": "82816",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.82816.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_82816.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_82816.jpeg",
+    "InspiredBy": {
+      "Name": "Ombre Nomade",
+      "Link": "https://www.fragrantica.com/perfume/Louis-Vuitton/Ombre-Nomade-49755.html"
+    },
+    "OriginalBrand": "Louis Vuitton"
+  },
+  {
+    "Name": "Al Qiam Silver",
+    "Brand": "Lattafa Perfumes",
+    "Status": "📦",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Al-Qiam-Silver-81763.html",
+    "ID": "81763",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.81763.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_81763.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_81763.jpeg",
+    "InspiredBy": {
+      "Name": "Tygar",
+      "Link": "https://www.fragrantica.com/perfume/Bvlgari/Tygar-41222.html"
+    },
+    "OriginalBrand": "Bvlgari"
+  },
+  {
+    "Name": "Breeze",
+    "Brand": "Lattafa Perfumes",
+    "Status": "📦",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Breeze-99142.html",
+    "ID": "99142",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.99142.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_99142.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_99142.jpeg",
+    "InspiredBy": {
+      "Name": "724",
+      "Link": "https://www.fragrantica.com/perfume/Maison-Francis-Kurkdjian/724-75754.html"
+    },
+    "OriginalBrand": "Maison Francis Kurkdjian"
+  },
+  {
+    "Name": "Dark Aoud",
+    "Brand": "Maison Alhambra",
+    "Status": "📦",
+    "Link": "https://www.fragrantica.com/perfume/Maison-Alhambra/Dark-Aoud-100483.html",
+    "ID": "100483",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.100483.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_100483.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_100483.jpeg",
+    "InspiredBy": {
+      "Name": "Oud Wood",
+      "Link": "https://www.fragrantica.com/perfume/Tom-Ford/Oud-Wood-1826.html"
+    },
+    "OriginalBrand": "Tom Ford"
+  },
+  {
+    "Name": "Masa",
+    "Brand": "Lattafa Perfumes",
+    "Status": "📦",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Masa-88636.html",
+    "ID": "88636",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.88636.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_88636.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_88636.jpeg",
+    "InspiredBy": {
+      "Name": "Ganymede",
+      "Link": "https://www.fragrantica.com/perfume/Marc-Antoine-Barrois/Ganymede-54720.html"
+    },
+    "OriginalBrand": "Marc Antoine Barrois"
+  },
+  {
+    "Name": "Al Areeq Gold",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Al-Areeq-Gold-82810.html",
+    "ID": "82810",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.82810.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_82810.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_82810.jpeg"
+  },
+  {
+    "Name": "Anchor Black",
+    "Brand": "Maison Alhambra",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Maison-Alhambra/Anchor-Black-93851.html",
+    "ID": "93851",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.93851.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_93851.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_93851.jpeg"
+  },
+  {
+    "Name": "Art Of Nature I",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Art-Of-Nature-I-98241.html",
+    "ID": "98241",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.98241.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_98241.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_98241.jpeg",
+    "InspiredBy": {
+      "Name": "Oud Maracuja",
+      "Link": "https://www.fragrantica.com/perfume/Maison-Crivelli/Oud-Maracuja-71898.html"
+    },
+    "OriginalBrand": "Maison Crivelli"
+  },
+  {
+    "Name": "Art Of Universe",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Art-Of-Universe-101314.html",
+    "ID": "101314",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.101314.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_101314.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_101314.jpeg",
+    "InspiredBy": {
+      "Name": "Blue Talisman",
+      "Link": "https://www.fragrantica.com/perfume/Ex-Nihilo/Blue-Talisman-84224.html"
+    },
+    "OriginalBrand": "Ex Nihilo"
+  },
+  {
+    "Name": "Art Of Wood",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Art-Of-Wood-98240.html",
+    "ID": "98240",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.98240.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_98240.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_98240.jpeg",
+    "InspiredBy": {
+      "Name": "Perseus",
+      "Link": "https://www.fragrantica.com/perfume/Parfums-de-Marly/Perseus-90199.html"
+    },
+    "OriginalBrand": "Parfums de Marly"
+  },
+  {
+    "Name": "Code Viola Nectar",
+    "Brand": "Khadlaj Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Khadlaj-Perfumes/Code-Viola-Nectar-105170.html",
+    "ID": "105170",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.105170.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_105170.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_105170.jpeg"
+  },
+  {
+    "Name": "Craze",
+    "Brand": "Armaf",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Armaf/Craze-47790.html",
+    "ID": "47790",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.47790.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_47790.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_47790.jpeg"
+  },
+  {
+    "Name": "Hala",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Hala-82813.html",
+    "ID": "82813",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.82813.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_82813.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_82813.jpeg",
+    "InspiredBy": {
+      "Name": "Full Incense",
+      "Link": "https://www.fragrantica.com/perfume/Montale/Full-Incense-9490.html"
+    },
+    "OriginalBrand": "Montale"
+  },
+  {
+    "Name": "Kashan",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Kashan-98244.html",
+    "ID": "98244",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.98244.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_98244.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_98244.jpeg"
+  },
+  {
+    "Name": "Maharjan Gold",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Maharjan-Gold-82798.html",
+    "ID": "82798",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.82798.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_82798.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_82798.jpeg"
+  },
+  {
+    "Name": "Natural Oud",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Natural-Oud-98243.html",
+    "ID": "98243",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.98243.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_98243.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_98243.jpeg"
+  },
+  {
+    "Name": "Opulent Oud",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Opulent-Oud-66012.html",
+    "ID": "66012",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.66012.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_66012.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_66012.jpeg"
+  },
+  {
+    "Name": "Qaa ed Al Shabaab",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Qaa-ed-Al-Shabaab-70246.html",
+    "ID": "70246",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.70246.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_70246.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_70246.jpeg"
+  },
+  {
+    "Name": "Ramaad Al Oud",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Ramaad-Al-Oud-100147.html",
+    "ID": "100147",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.100147.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_100147.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_100147.jpeg"
+  },
+  {
+    "Name": "Sceptre Malachite",
+    "Brand": "Maison Alhambra",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Maison-Alhambra/Sceptre-Malachite-94163.html",
+    "ID": "94163",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.94163.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_94163.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_94163.jpeg"
+  },
+  {
+    "Name": "Supremacy Noir",
+    "Brand": "Afnan",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Afnan/Supremacy-Noir-40683.html",
+    "ID": "40683",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.40683.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_40683.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_40683.jpeg"
+  },
+  {
+    "Name": "Winners Trophy Silver",
+    "Brand": "Lattafa Perfumes",
+    "Status": "⭐",
+    "Link": "https://www.fragrantica.com/perfume/Lattafa-Perfumes/Winners-Trophy-Silver-82622.html",
+    "ID": "82622",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.82622.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_82622.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_82622.jpeg"
+  },
+  {
+    "Name": "Explorer",
+    "Brand": "Montblanc",
+    "Status": "🗑️",
+    "Link": "https://www.fragrantica.com/perfume/Montblanc/Explorer-52002.html",
+    "ID": "52002",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.52002.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_52002.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_52002.jpeg",
+    "InspiredBy": {
+      "Name": "Aventus",
+      "Link": "https://www.fragrantica.com/perfume/Creed/Aventus-9828.html"
+    },
+    "OriginalBrand": "Creed"
+  },
+  {
+    "Name": "L Eau par Kenzo pour Homme",
+    "Brand": "Kenzo",
+    "Status": "🗑️",
+    "Link": "https://www.fragrantica.com/perfume/Kenzo/L-Eau-par-Kenzo-pour-Homme-79.html",
+    "ID": "79",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.79.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_79.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_79.jpeg"
+  },
+  {
+    "Name": "Loewe 7 Sport",
+    "Brand": "Loewe",
+    "Status": "🗑️",
+    "Link": "https://www.fragrantica.com/perfume/Loewe/Loewe-7-Sport-23904.html",
+    "ID": "23904",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.23904.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_23904.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_23904.jpeg"
+  },
+  {
+    "Name": "Terre d Hermes Parfum",
+    "Brand": "Hermes",
+    "Status": "🗑️",
+    "Link": "https://www.fragrantica.com/perfume/Hermes/Terre-d-Hermes-Parfum-8282.html",
+    "ID": "8282",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.8282.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_8282.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_8282.jpeg"
+  },
+  {
+    "Name": "Vibrant Leather Eau de Parfum",
+    "Brand": "Zara",
+    "Status": "🗑️",
+    "Link": "https://www.fragrantica.com/perfume/Zara/Vibrant-Leather-Eau-de-Parfum-50122.html",
+    "ID": "50122",
+    "Photo": "https://fimgs.net/mdimg/perfume/375x500.50122.jpg",
+    "ModalEN": "https://www.fragrantica.com/mdimg/perfume-social-cards/en-p_c_50122.jpeg",
+    "ModalES": "https://www.fragrantica.es/mdimg/perfume-social-cards/es-p_c_50122.jpeg",
+    "InspiredBy": {
+      "Name": "Aventus",
+      "Link": "https://www.fragrantica.com/perfume/Creed/Aventus-9828.html"
+    },
+    "OriginalBrand": "Creed"
+  }
+];
+
+
+
+    perfumes.forEach(p => {
+      // Table row
+      const row = document.createElement('tr');
+      row.setAttribute('data-status', p.Status);
+      row.innerHTML = `
+        <td><img src="${p.Photo}" width="50" onclick="openModal(currentLang, '${p.ID}')"></td>
+        <td><a href="${p.Link}" target="_blank">${p.Name}</a></td>
+        <td>${p.Brand || '-'}</td>
+        <td class="original-col toggle-column">${
+          p.InspiredBy
+            ? `<a href="${p.InspiredBy.Link}" target="_blank">${p.InspiredBy.Name}</a>`
+            : '-'
+        }</td>
+        <td class="original-col toggle-column">${p.OriginalBrand || '-'}</td>
+        <td>${p.Status}</td>`;
+      document.getElementById('tableBody').appendChild(row);
+
+      // Gallery card
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.setAttribute('data-status', p.Status);
+      card.innerHTML = `
+        <img src="${p.Photo}" onclick="openModal(currentLang, '${p.ID}')">
+        <p><a href="${p.Link}" target="_blank">${p.Name}</a></p>
+        <p>${p.Brand || '-'}</p>
+        <p class="original-col toggle-column">${
+          p.InspiredBy
+            ? `<a href="${p.InspiredBy.Link}" target="_blank">${p.InspiredBy.Name}</a>`
+            : '-'
+        }</p>
+        <p class="original-col toggle-column">${p.OriginalBrand || '-'}</p>`;
+      document.getElementById('galleryView').appendChild(card);
+    });
+
+
+// Actualizar contadores por estado
+const counts = { total: 0, "🟢": 0, "📦": 0, "⭐": 0, "🗑️": 0 };
+perfumes.forEach(p => {
+  counts.total++;
+  if (counts[p.Status] !== undefined) counts[p.Status]++;
+});
+document.querySelectorAll(".status-label")[0].textContent = `📦 Total (${counts.total})`;
+document.querySelectorAll(".status-label")[1].textContent = `🟢 In stock (${counts["🟢"]})`;
+document.querySelectorAll(".status-label")[2].textContent = `📦 Purchased (${counts["📦"]})`;
+document.querySelectorAll(".status-label")[3].textContent = `⭐ Wishlist (${counts["⭐"]})`;
+document.querySelectorAll(".status-label")[4].textContent = `🗑️ Finished (${counts["🗑️"]})`;
+
+applyFilters();
+
+
+document.addEventListener('DOMContentLoaded', translatePage);
+
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark');
+      localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+    }
+
+    // Aplicar el modo desde almacenamiento local si existe
+    document.addEventListener('DOMContentLoaded', function () {
+      const stored = localStorage.getItem('theme');
+      if (stored) {
+        document.body.classList.toggle('dark', stored === 'dark');
+      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('dark');
+      }
+    });
+    
+  </script>
+</body>
+</html>
